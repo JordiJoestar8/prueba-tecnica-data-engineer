@@ -11,6 +11,7 @@ TODO: Complete the following functions:
 
 import time
 import pandas as pd
+import numpy as np
 from datetime import datetime
 from pathlib import Path
 from scripts.generate_transactions import generate_transactions
@@ -70,6 +71,43 @@ def clean_data(df):
     # df_clean = df.copy()
     # ... your cleaning logic ...
     # return df_clean
+
+#------------------------INICIO-LOGICA------------------------#
+    df_clean = df.copy()
+    rows_inicio = len(df_clean)
+    
+    # 1. Eliminar duplicados 
+    df_clean.drop_duplicates(inplace=True)
+    
+    # 2. Manejar valores nulos/faltantes 
+    
+    # - Eliminar filas donde falten datos CRÍTICOS (ej. amount, transaction_id)
+    df_clean.dropna(subset=['amount', 'transaction_id', 'user_id', 'merchant_id'], inplace=True)
+
+    # - Rellenar valores nulos en columnas no críticas o de texto
+    df_clean['country_code'] = df_clean['country_code'].fillna('ZZ') # 'ZZ' para código desconocido
+    df_clean['status'] = df_clean['status'].fillna('UNKNOWN')
+
+    # 3. Validar y convertir tipos de datos 
+    
+    # - Asegurar que 'amount' sea numérico. Forzamos a NaN los errores y los eliminamos.
+    df_clean['amount'] = pd.to_numeric(df_clean['amount'], errors='coerce')
+    df_clean.dropna(subset=['amount'], inplace=True)
+    df_clean['amount'] = df_clean['amount'].astype(float)
+    
+    # - Convertir fechas (asumiendo que la columna se llama 'transaction_datetime')
+    df_clean['transaction_datetime'] = pd.to_datetime(df_clean['transaction_datetime'], errors='coerce', utc=True)
+    df_clean.dropna(subset=['transaction_datetime'], inplace=True)
+    
+    # 4. Estandarizar formatos 
+    
+    # - Estandarizar códigos de país a mayúsculas
+    df_clean['country_code'] = df_clean['country_code'].str.upper()
+    
+    rows_final = len(df_clean)
+    print(f"   - Limpieza finalizada. Filas eliminadas: {rows_inicio - rows_final}")
+    return df_clean
+#------------------------FIN-LOGICA------------------------#
 
     raise NotImplementedError("clean_data() function needs to be implemented")
 

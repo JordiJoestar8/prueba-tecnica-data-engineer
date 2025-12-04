@@ -1,2 +1,6 @@
-pandas
+pandas # libreria para los dataframes
 nump
+
+# Para conectar Python con PostgreSQL
+sqlalchemy      
+psycopg2-binary 
