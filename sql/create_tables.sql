@@ -4,6 +4,11 @@ DROP TABLE IF EXISTS dim_payment;
 DROP TABLE IF EXISTS dim_merchant;
 DROP TABLE IF EXISTS dim_user;
 
+
+-- =========================================================
+-- Esquema Estrella (Star Schema), modelo más simple y eficiente para consultas analíticas sobre transacciones
+-- =========================================================
+
 -- =========================================================
 -- 1. Tablas de Dimensiones
 -- =========================================================
@@ -32,6 +37,8 @@ CREATE TABLE dim_payment (
 -- 2. Tabla de Hechos (Fact Table)
 -- =========================================================
 
+
+-- fact_transactions es el centro de tu esquema. Contiene las métricas y las claves que enlazan con las Dimensiones.
 CREATE TABLE fact_transactions (
     transaction_id VARCHAR(50) PRIMARY KEY,
     timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
