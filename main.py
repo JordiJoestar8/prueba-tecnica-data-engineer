@@ -72,8 +72,25 @@ def clean_data(df):
     rows_inicio = len(df_clean)
     
     # 1. Eliminar duplicados 
-    df_clean.drop_duplicates(inplace=True)
+    #df_clean.drop_duplicates(inplace=True)
     
+    # Se utiliza una clave compuesta que define la identidad única de la transacción
+    DUPLICATE_SUBSET = [
+        'transaction_id',   #ID único generado por el sistema
+        'user_id',          #Quién inicia la transacción
+        'merchant_id',      #Donde va el dinero
+        'amount',           #Cantidad transferida
+        'timestamp',        #Fecha en que ocurrio la transaccion
+        'status'            #Estado (aproved, declined, refunded, pending)
+    ]
+    
+    # Se cuentan y eliminan duplicados, manteniendo el primer registro ('keep='first')
+    initial_duplicates = len(df_clean[df_clean.duplicated(subset=DUPLICATE_SUBSET, keep='first')])
+    
+    df_clean.drop_duplicates(subset=DUPLICATE_SUBSET, keep='first', inplace=True)
+    
+    print(f"   - Filas duplicadas eliminadas: {initial_duplicates}")
+
     # 2. Manejar valores nulos/faltantes 
     
     # - Eliminar filas donde falten datos CRÍTICOS (ej. amount, transaction_id)
