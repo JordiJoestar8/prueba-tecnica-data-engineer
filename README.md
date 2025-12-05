@@ -36,7 +36,6 @@ docker-compose up -d
 python main.py
 
 # Para confirmar la carga, se accede a la consola de PosrtgreSQL
-# Reemplazar <nombre_contenedor> por el nombre de tu contenedor (ej. reto-tecnico-dataengineer_db_1)
 docker exec -it retotecnico-dataengineer-db-1 psql -U usuarioDB -d data_warehouse
 
 # Una vez dentro de la consola psql:
@@ -44,16 +43,16 @@ SELECT COUNT(*) FROM fact_transactions;
 \q
 
 ## Fases completadas
-# Fase 1: Setup y estructura
+Fase 1: Setup y estructura
 
-# Fase 2: Lógica ETL y detección de fraude
+Fase 2: Lógica ETL y detección de fraude
 
-# Fase 3: Datawarehouse (extra: se dockerizó PostgreSQL con docker-compose)
+Fase 3: Datawarehouse (extra: se dockerizó PostgreSQL con docker-compose)
 
 ## Fases faltantes
-# Fase 4: Procesamiento en tiempo real
+Fase 4: Procesamiento en tiempo real
 
 ## Tiempo invertido
-# Setup y logica ETL - 4 horas
-# Configuracion Docker y PostgreSQL - 3 horas
-# Pruebas y documentacion - 1 hora
+Setup y logica ETL - 4 horas
+Configuracion Docker y PostgreSQL - 3 horas
+Pruebas y documentacion - 1 hora
