@@ -1,0 +1,27 @@
+
+services:
+  # Definición del servicio de PostgreSQL
+  db:
+    #Definimos la imagen de PostgreSQL a usar
+    image: postgres:15-alpine # Imagen ligera y estable de PostgreSQL
+    restart: always
+    #Establecemos las variables de entorno necesarias para la configuración inicial de la DB
+    environment:
+      POSTGRES_USER: usuarioDB # Nombre de usuario de la DB
+      POSTGRES_PASSWORD: contraDB # Contraseña
+      POSTGRES_DB: data_warehouse # Nombre de la base de datos
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Persistencia de los datos
+      - ./sql:/docker-entrypoint-initdb.d # Carpeta para scripts SQL iniciales
+    ports:
+      - "5433:5432"  # Mapea el puerto del contenedor (5432) al puerto de mi laptop. 
+                      #Lo cambié de 5432:5432 a 5433:5432 para evitar conflictos ya que tengo PostgreSQL instalado localmente
+    healthcheck: # Se verifica que la DB esté lista antes de que otros servicios se conecten
+      test: ["CMD-SHELL", "pg_isready -U admin"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+# Volumen para asegurar que los datos no se borren si el contenedor se detiene
+volumes:
+  postgres_data:

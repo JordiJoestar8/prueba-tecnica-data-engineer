@@ -16,6 +16,17 @@ from datetime import datetime
 from pathlib import Path
 from scripts.generate_transactions import generate_transactions
 
+import psycopg2
+from psycopg2 import extras # Necesario para inserción masiva
+
+# Configuración de la base de datos (DB_URI)
+# Usamos el servicio 'db' definido en docker-compose
+DB_HOST = "localhost" 
+DB_PORT = "5433"    # Uso 5433 para evitar conflicto de puertos locales
+DB_NAME = "data_warehouse"
+DB_USER = "usuarioDB"
+DB_PASS = "contraDB"
+
 
 # Configuration
 TRANSACTIONS_FOLDER = Path("./transactions")
@@ -194,6 +205,84 @@ def detect_suspicious_transactions(df):
 
     raise NotImplementedError("detect_suspicious_transactions() function needs to be implemented")
 
+#------------------------Carga a PostgreSQL------------------------#
+def load_to_postgres(df_normal: pd.DataFrame, df_suspicious: pd.DataFrame):
+    """
+    Establece la conexión con PostgreSQL e inserta los datos limpios.
+    """
+    print("   - Conectando a PostgreSQL...")
+    conn = None
+    try:
+        conn = psycopg2.connect(
+            host=DB_HOST, port=DB_PORT, dbname=DB_NAME, user=DB_USER, password=DB_PASS
+        )
+        conn.autocommit = False 
+        cursor = conn.cursor()
+
+        # 1. Concatenar y preparar datos para la carga
+        df_normal['is_suspicious'] = False
+        df_suspicious['is_suspicious'] = True
+        df = pd.concat([df_normal, df_suspicious], ignore_index=True)
+
+        print("   - Paso 1: Cargando Dimensiones (User, Merchant, Payment)")
+        
+        # --- A. Inserción de Dimensiones (ON CONFLICT DO NOTHING evita duplicados) ---
+
+        # DIM_PAYMENT
+        payment_data = df[['payment_method', 'payment_provider']].drop_duplicates()
+        insert_payment_query = "INSERT INTO dim_payment (payment_method, payment_provider) VALUES (%s, %s) ON CONFLICT (payment_method, payment_provider) DO NOTHING;"
+        extras.execute_batch(cursor, insert_payment_query, payment_data.values.tolist())
+
+        # DIM_USER y DIM_MERCHANT (Solo el ID)
+        extras.execute_batch(cursor, "INSERT INTO dim_user (user_id) VALUES (%s) ON CONFLICT (user_id) DO NOTHING;", df[['user_id']].drop_duplicates().values.tolist())
+        extras.execute_batch(cursor, "INSERT INTO dim_merchant (merchant_id) VALUES (%s) ON CONFLICT (merchant_id) DO NOTHING;", df[['merchant_id']].drop_duplicates().values.tolist())
+        
+        # --- B. Obtener Claves Foráneas (Keys) de las Dimensiones ---
+
+        # Mapear IDs a KEYs internas de la DB
+        cursor.execute("SELECT payment_key, payment_method, payment_provider FROM dim_payment")
+        payment_map_df = pd.DataFrame(cursor.fetchall(), columns=['payment_key', 'payment_method', 'payment_provider'])
+        df = pd.merge(df, payment_map_df, on=['payment_method', 'payment_provider'], how='left')
+        
+        cursor.execute("SELECT user_key, user_id FROM dim_user")
+        user_map_df = pd.DataFrame(cursor.fetchall(), columns=['user_key', 'user_id'])
+        df = pd.merge(df, user_map_df, on=['user_id'], how='left')
+
+        cursor.execute("SELECT merchant_key, merchant_id FROM dim_merchant")
+        merchant_map_df = pd.DataFrame(cursor.fetchall(), columns=['merchant_key', 'merchant_id'])
+        df = pd.merge(df, merchant_map_df, on=['merchant_id'], how='left')
+        
+        
+        print("   - Paso 2: Cargando Hechos (Fact Transactions)")
+
+        # 2. Preparar datos para la tabla fact_transactions
+        fact_data = df[[
+            'transaction_id', 'timestamp', 'user_key', 'merchant_key', 'payment_key',
+            'amount', 'currency', 'status', 'country', 'response_code',
+            'transaction_fee', 'net_amount', 'attempt_number', 'is_suspicious'
+        ]]
+
+        insert_fact_query = """
+            INSERT INTO fact_transactions (
+                transaction_id, timestamp, user_key, merchant_key, payment_key,
+                amount, currency, status, country, response_code,
+                transaction_fee, net_amount, attempt_number, is_suspicious
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (transaction_id) DO NOTHING;
+        """
+        extras.execute_batch(cursor, insert_fact_query, fact_data.values.tolist())
+
+        conn.commit()
+        print(f"   - Carga exitosa: {len(df)} registros procesados y enviados a fact_transactions.")
+
+    except psycopg2.Error as e:
+        if conn:
+            conn.rollback()
+        print(f"ERROR DE POSTGRESQL al cargar: {e}")
+        raise
+    finally:
+        if conn:
+            conn.close()
+
 
 def process_batch(raw_file):
     """
@@ -219,6 +308,7 @@ def process_batch(raw_file):
         print(f"Found {len(df_suspicious)} suspicious transactions")
         print(f"Found {len(df_normal)} normal transactions")
 
+        '''
         # Save processed results
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -231,7 +321,15 @@ def process_batch(raw_file):
             suspicious_file = SUSPICIOUS_FOLDER / f"suspicious_{timestamp}.csv"
             df_suspicious.to_csv(suspicious_file, index=False)
             print(f"WARNING: Saved suspicious transactions to: {suspicious_file}")
-
+        '''
+        # Step 3: Load cleaned data into PostgreSQL
+        print("Loading data into PostgreSQL...")
+        if not df_normal.empty or not df_suspicious.empty:
+        # Llama a la nueva función de carga a DB
+            load_to_postgres(df_normal, df_suspicious)
+        
+        # Elimina el archivo crudo para mantener limpio el Data Lake
+        raw_file.unlink()
         print(f"Batch processing completed successfully")
 
     except NotImplementedError as e:
