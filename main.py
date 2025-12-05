@@ -66,12 +66,7 @@ def clean_data(df):
     Returns:
         pd.DataFrame: Cleaned transaction data
     """
-    # YOUR CODE HERE
-    # Example structure:
-    # df_clean = df.copy()
-    # ... your cleaning logic ...
-    # return df_clean
-
+    
 #------------------------INICIO-LOGICA------------------------#
     df_clean = df.copy()
     rows_inicio = len(df_clean)
@@ -85,7 +80,7 @@ def clean_data(df):
     df_clean.dropna(subset=['amount', 'transaction_id', 'user_id', 'merchant_id'], inplace=True)
 
     # - Rellenar valores nulos en columnas no críticas o de texto
-    df_clean['country_code'] = df_clean['country_code'].fillna('ZZ') # 'ZZ' para código desconocido
+    df_clean['country'] = df_clean['country'].fillna('ZZ') # 'ZZ' para código desconocido
     df_clean['status'] = df_clean['status'].fillna('UNKNOWN')
 
     # 3. Validar y convertir tipos de datos 
@@ -95,14 +90,14 @@ def clean_data(df):
     df_clean.dropna(subset=['amount'], inplace=True)
     df_clean['amount'] = df_clean['amount'].astype(float)
     
-    # - Convertir fechas (asumiendo que la columna se llama 'transaction_datetime')
-    df_clean['transaction_datetime'] = pd.to_datetime(df_clean['transaction_datetime'], errors='coerce', utc=True)
-    df_clean.dropna(subset=['transaction_datetime'], inplace=True)
+    # - Convertir fechas a datetime
+    df_clean['timestamp'] = pd.to_datetime(df_clean['timestamp'], errors='coerce', utc=True)
+    df_clean.dropna(subset=['timestamp'], inplace=True)
     
     # 4. Estandarizar formatos 
     
     # - Estandarizar códigos de país a mayúsculas
-    df_clean['country_code'] = df_clean['country_code'].str.upper()
+    df_clean['country'] = df_clean['country'].str.upper()
     
     rows_final = len(df_clean)
     print(f"   - Limpieza finalizada. Filas eliminadas: {rows_inicio - rows_final}")
@@ -130,13 +125,55 @@ def detect_suspicious_transactions(df):
     Returns:
         tuple: (normal_df, suspicious_df) - DataFrames split by suspicion status
     """
-    # YOUR CODE HERE
-    # Example structure:
-    # df['is_suspicious'] = False
-    # ... your detection logic ...
-    # suspicious_df = df[df['is_suspicious'] == True]
-    # normal_df = df[df['is_suspicious'] == False]
-    # return normal_df, suspicious_df
+
+#------------------------INICIO-LOGICA------------------------#
+    #Implementa la lógica de detección de fraude y separa los DataFrames.
+    
+    df['is_suspicious'] = False # Creamos una flag inicialmente con el valor de False
+
+    # --- Criterios de Detección de Fraude ---
+    
+    # 1. Montos Inusualmente Altos (Outliers) 
+    # Se marca cualquier transacción que esté por encima de 2 desviaciones estándar (2*std)
+    # Es un indicador estadístico de que el valor es una rareza.
+    MEAN_AMOUNT = df['amount'].mean()
+    STD_AMOUNT = df['amount'].std()
+    HIGH_AMOUNT = MEAN_AMOUNT + 2 * STD_AMOUNT  #Calculo de monto inusualmente altos
+    
+    # localizamos las columnas con valor mayor al HIGH_AMOUNT y cambiamos el valor de 'is_suspicious' a Tru
+    df.loc[df['amount'] > HIGH_AMOUNT, 'is_suspicious'] = True
+    print(f"   - Regla 1 (Monto Alto > {HIGH_AMOUNT:.2f}): {df['is_suspicious'].sum()} marcadas.")
+
+    # 2. Transacciones Múltiples Fallidas (Patrón anómalo) 
+    # Se simula el conteo de fallos por usuario/minuto.
+    # Si un usuario tiene más de 3 transacciones fallidas ('declined')
+    # en el mismo lote (que representa 1 minuto de ingesta), se marca como sospechoso.
+    
+    failed_counts = df[df['status'] == 'declined'].groupby('user_id')['transaction_id'].count()
+    users_with_many_fails = failed_counts[failed_counts >= 3].index
+    
+    df.loc[(df['user_id'].isin(users_with_many_fails)), 'is_suspicious'] = True
+    print(f"   - Regla 2 (Múltiples Fallidos): {len(users_with_many_fails)} usuarios flaggeados.")
+
+    # 3. Transacciones Internacionales de Alto Riesgo 
+    # Se marca cualquier transacción donde el país no es el país base ('PE' asumido) Y el monto es alto (ej. > 5000)
+    BASE_COUNTRY = 'PE' 
+    INTERNATIONAL_HIGH_AMOUNT = 1000     #Colocando un valor por defecto de 1000
+    
+    df.loc[(df['country'] != BASE_COUNTRY) & (df['amount'] > INTERNATIONAL_HIGH_AMOUNT), 'is_suspicious'] = True
+    print(f"   - Regla 3 (Internacional de Alto Riesgo): {df['is_suspicious'].sum()} marcadas.")
+    
+    # --- Separar DataFrames ---
+    
+    df_suspicious = df[df['is_suspicious'] == True].copy()
+    df_normal = df[df['is_suspicious'] == False].copy()
+    
+    # La columna 'is_suspicious' ya no es necesaria en los resultados
+    df_suspicious.drop(columns=['is_suspicious'], inplace=True)
+    df_normal.drop(columns=['is_suspicious'], inplace=True)
+
+    return df_normal, df_suspicious
+#------------------------FIN-LOGICA------------------------#
 
     raise NotImplementedError("detect_suspicious_transactions() function needs to be implemented")
 

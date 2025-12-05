@@ -1,5 +1,6 @@
 pandas # libreria para los dataframes
 nump
+Faker # libreria para numeros aleatorios
 
 # Para conectar Python con PostgreSQL
 sqlalchemy      
